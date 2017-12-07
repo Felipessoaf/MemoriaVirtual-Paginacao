@@ -10,7 +10,18 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/shm.h>
 #include <time.h>
+
+typedef struct frame
+{
+	int page;
+	char M;
+	char R;
+	clock_t lastUse;
+} Frame;
 
 void ReadFile(char *fileName)
 {
@@ -27,7 +38,8 @@ void ReadFile(char *fileName)
 
 	while(fscanf(file, "%x %c", &addr, &rw) == 2)
 	{
-		printf("Endereco: %x\tAcesso: %c\n", addr, rw);
+		//TODO: mapear endereço
+		//printf("Endereco: %x\tAcesso: %c\n", addr, rw);
 	}
 
 	fclose(file);
@@ -35,9 +47,14 @@ void ReadFile(char *fileName)
 
 int main()
 {
-	int i, status;
+	int i, status, seg;
 	clock_t start, end;
 	double cpu_time_used;
+	Frame *mainMem;
+
+	seg = shmget (IPC_PRIVATE, 256*sizeof(Frame), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+
+	mainMem = (Frame*)shmat(seg,0,0);
 
 	start = clock();
 	if(fork() != 0)

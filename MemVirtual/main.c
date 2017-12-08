@@ -15,6 +15,8 @@
 #include <sys/shm.h>
 #include <time.h>
 
+#include "VM.h"
+
 typedef struct frame
 {
 	int page;
@@ -23,11 +25,39 @@ typedef struct frame
 	clock_t lastUse;
 } Frame;
 
+typedef struct page
+{
+	int frame;
+	char inMemory;
+} Page;
+
+void PageFault()
+{
+	//REGIAO CRITICA--------------------------------------
+	//ve se tem espaço na memoria
+	//se tiver, marca o lugar como usado
+	//senao, chama o LRU pra decidir qual vai sair,
+	//se tiver modificado, marca pra esperar mais 1 segundo
+	//espera 1 ou 2 segundos, dependendo do criterio acima
+	//tira ele, e bota o novo no lugar
+	//manda SIGUSR2 pro processo que perdeu o frame
+	//REGIAO CRITICA--------------------------------------
+}
+
+void LostPage()
+{
+	//atualiza na tabela de paginas
+}
+
 void ReadFile(char *fileName)
 {
-	unsigned int addr;
+	int pid;
+	unsigned int addr, page, offset;
 	char rw;
 	FILE* file;
+
+	signal(SIGUSR2, LostPage);
+
 	file = fopen(fileName, "r");
 
 	if(file == NULL)
@@ -39,7 +69,11 @@ void ReadFile(char *fileName)
 	while(fscanf(file, "%x %c", &addr, &rw) == 2)
 	{
 		//TODO: mapear endereço
-		//printf("Endereco: %x\tAcesso: %c\n", addr, rw);
+		page = addr>>16;
+		offset = ((addr<<16)>>16);
+		pid = getpid();
+
+		trans(pid, page, offset, rw);
 	}
 
 	fclose(file);
@@ -52,7 +86,7 @@ int main()
 	double cpu_time_used;
 	Frame *mainMem;
 
-	seg = shmget (IPC_PRIVATE, 256*sizeof(Frame), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+	seg = shmget (1234, 256*sizeof(Frame), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
 
 	mainMem = (Frame*)shmat(seg,0,0);
 
@@ -63,7 +97,11 @@ int main()
 		{
 			if(fork() != 0)
 			{
-				if(fork() == 0)
+				if(fork() != 0)
+				{
+					signal(SIGUSR2, PageFault);
+				}
+				else
 				{
 					//filho4
 					ReadFile("simulador.log");

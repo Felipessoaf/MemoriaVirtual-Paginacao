@@ -21,14 +21,6 @@
 #define MAXFRAME 256
 #define RESETTIMER 30
 
-typedef struct frame
-{
-	int page;
-	char M;
-//	char R;
-	clock_t lastUse;
-	int pid;
-} Frame;
 
 void PageFault(int sig, siginfo_t* info, void* vp)
 {
@@ -48,18 +40,19 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 	segFrame = shmget (1234, 256*sizeof(Frame), 0666);
 	mainMem = (Frame*)shmat(seg,0,0);
 
+	printf("\n\n\nPAGE FAULT\n\n\n");
+
 	//manda SIGSTOP pro sender
 	kill(info->si_pid, SIGSTOP);
 
-	//REGIAO CRITICA--------------------------------------
 	//ve se tem espaço na memoria
 	if(*lastIndex < MAXFRAME)
 	{
-		//se tiver, marca o lugar como usado
+		//atualiza tabela
 		pageTable[currentPage].frame = *lastIndex;
 		pageTable[currentPage].inMemory = 1;
+		//se tiver, marca o lugar como usado
 		mainMem[*lastIndex].page = currentPage;
-		mainMem[*lastIndex].M = ;
 		mainMem[*lastIndex].pid = info->si_pid;
 		mainMem[*lastIndex].lastUse = clock();
 		(*lastIndex)++;
@@ -72,21 +65,27 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 		sleep(1);
 		pidLost = mainMem[removeIndex].pid;
 		//se tiver modificado, marca pra esperar mais 1 segundo
-		if(mainMem[removeIndex].M)
+		if(mainMem[removeIndex].M == 1)
 		{
 			sleep(1);
 		}
+
+		//atualiza tabela
+		pageTable[currentPage].frame = removeIndex;
+		pageTable[currentPage].inMemory = 1;
+
 		//update page a ser retirada
 		*currentPage = mainMem[removeIndex].page;
 		//tira ele, e bota o novo no lugar
 		mainMem[removeIndex].page = currentPage;
-		mainMem[removeIndex].M = ;
 		mainMem[removeIndex].pid = info->si_pid;
 		mainMem[removeIndex].lastUse = clock();
-		//manda SIGUSR2 pro processo que perdeu o frame
-	}
-	//REGIAO CRITICA--------------------------------------
 
+		//manda SIGUSR2 pro processo que perdeu o frame
+		kill(pidLost, SIGUSR2);
+	}
+
+	printf("\n\n\nLIBERANDO PAGE FAULT\n\n\n");
 	//manda SIGCONT pro sender
 	kill(info->si_pid, SIGCONT);
 }
@@ -130,6 +129,17 @@ int LRU(Frame *mainMem)
 void LostPage()
 {
 	//atualiza na tabela de paginas
+	int seg, segPage, *currentPage;
+	Page *pageTable;
+
+	seg = shmget (getpid(), MAXPAGE*sizeof(Page), 0666);
+	pageTable = (Page*)shmat(seg,0,0);
+
+	segPage = shmget (4321, sizeof(int), 0666);
+	currentPage = (int*)shmat(segPage,0,0);
+
+	pageTable[currentPage].frame = -1;
+	pageTable[currentPage].inMemory = 0;
 }
 
 void ReadFile(char *fileName)
@@ -187,6 +197,7 @@ int main()
 				if(fork() != 0)
 				{
 					//signal(SIGUSR2, PageFault);
+					Init();
 					struct sigaction sa;
 					sa.sa_handler = &PageFault;
 					sigemptyset(&sa.sa_mask);

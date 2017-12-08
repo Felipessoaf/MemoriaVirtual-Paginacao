@@ -14,34 +14,117 @@
 #include <sys/stat.h>
 #include <sys/shm.h>
 #include <time.h>
+#include <limits.h>
 
 #include "VM.h"
+
+#define MAXFRAME 256
+#define RESETTIMER 30
 
 typedef struct frame
 {
 	int page;
 	char M;
-	char R;
+//	char R;
 	clock_t lastUse;
+	int pid;
 } Frame;
 
-typedef struct page
+void PageFault(int sig, siginfo_t* info, void* vp)
 {
-	int frame;
-	char inMemory;
-} Page;
+	int i, seg, segPage, segPageTable, segFrame, *currentPage, segIndex, *lastIndex, pidLost, removeIndex;
+	Page *pageTable;
+	Frame *mainMem;
 
-void PageFault()
-{
+	segIndex = shmget (8462, sizeof(int), 0666);
+	lastIndex = (int*)shmat(segIndex,0,0);
+
+	segPage = shmget (4321, sizeof(int), 0666);
+	currentPage = (int*)shmat(segPage,0,0);
+
+	segPageTable = shmget (info->si_pid, MAXPAGE*sizeof(Page), 0666);
+	pageTable = (Page*)shmat(segPageTable,0,0);
+
+	segFrame = shmget (1234, 256*sizeof(Frame), 0666);
+	mainMem = (Frame*)shmat(seg,0,0);
+
+	//manda SIGSTOP pro sender
+	kill(info->si_pid, SIGSTOP);
+
 	//REGIAO CRITICA--------------------------------------
 	//ve se tem espaço na memoria
-	//se tiver, marca o lugar como usado
-	//senao, chama o LRU pra decidir qual vai sair,
-	//se tiver modificado, marca pra esperar mais 1 segundo
-	//espera 1 ou 2 segundos, dependendo do criterio acima
-	//tira ele, e bota o novo no lugar
-	//manda SIGUSR2 pro processo que perdeu o frame
+	if(*lastIndex < MAXFRAME)
+	{
+		//se tiver, marca o lugar como usado
+		pageTable[currentPage].frame = *lastIndex;
+		pageTable[currentPage].inMemory = 1;
+		mainMem[*lastIndex].page = currentPage;
+		mainMem[*lastIndex].M = ;
+		mainMem[*lastIndex].pid = info->si_pid;
+		mainMem[*lastIndex].lastUse = clock();
+		(*lastIndex)++;
+		sleep(1);
+	}
+	else
+	{
+		//senao, chama o LRU pra decidir qual vai sair
+		removeIndex = LRU(mainMem);
+		sleep(1);
+		pidLost = mainMem[removeIndex].pid;
+		//se tiver modificado, marca pra esperar mais 1 segundo
+		if(mainMem[removeIndex].M)
+		{
+			sleep(1);
+		}
+		//update page a ser retirada
+		*currentPage = mainMem[removeIndex].page;
+		//tira ele, e bota o novo no lugar
+		mainMem[removeIndex].page = currentPage;
+		mainMem[removeIndex].M = ;
+		mainMem[removeIndex].pid = info->si_pid;
+		mainMem[removeIndex].lastUse = clock();
+		//manda SIGUSR2 pro processo que perdeu o frame
+	}
 	//REGIAO CRITICA--------------------------------------
+
+	//manda SIGCONT pro sender
+	kill(info->si_pid, SIGCONT);
+}
+
+int LRU(Frame *mainMem)
+{
+	int seg,i, removeIndex;
+	clock_t minTime;
+//	Frame *mainMem;
+
+	minTime = clock();
+	removeIndex = -1;
+
+//	seg = shmget (1234, 256*sizeof(Frame), 0666);
+//	if(seg < 0)
+//	{
+//		printf("Error shmget\n");
+//		exit(1);
+//	}
+//
+//	mainMem = (Frame*)shmat(seg,0,0);
+
+	for(i = 0; i < MAXFRAME; i++)
+	{
+		if(mainMem[i]->lastUse < minTime)
+		{
+			removeIndex = i;
+			minTime = mainMem[i]->lastUse;
+		}
+	}
+
+	if(removeIndex == -1)
+	{
+		printf("Error LRU\n");
+		exit(1);
+	}
+
+	return minTime;
 }
 
 void LostPage()
@@ -59,6 +142,7 @@ void ReadFile(char *fileName)
 	signal(SIGUSR2, LostPage);
 
 	file = fopen(fileName, "r");
+	pid = getpid();
 
 	if(file == NULL)
 	{
@@ -68,10 +152,8 @@ void ReadFile(char *fileName)
 
 	while(fscanf(file, "%x %c", &addr, &rw) == 2)
 	{
-		//TODO: mapear endereço
 		page = addr>>16;
 		offset = ((addr<<16)>>16);
-		pid = getpid();
 
 		trans(pid, page, offset, rw);
 	}
@@ -81,14 +163,19 @@ void ReadFile(char *fileName)
 
 int main()
 {
-	int i, status, seg;
+	int i, status, seg, segPage, segIndex, *currentPage, *lastIndex;
 	clock_t start, end;
 	double cpu_time_used;
 	Frame *mainMem;
 
-	seg = shmget (1234, 256*sizeof(Frame), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+	seg = shmget (1234, MAXFRAME*sizeof(Frame), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+	segPage = shmget (4321, sizeof(int), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+	segIndex = shmget (8462, sizeof(int), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
 
 	mainMem = (Frame*)shmat(seg,0,0);
+	currentPage = (int*)shmat(segPage,0,0);
+	lastIndex = (int*)shmat(segIndex,0,0);
+	*lastIndex = 0;
 
 	start = clock();
 	if(fork() != 0)
@@ -99,7 +186,15 @@ int main()
 			{
 				if(fork() != 0)
 				{
-					signal(SIGUSR2, PageFault);
+					//signal(SIGUSR2, PageFault);
+					struct sigaction sa;
+					sa.sa_handler = &PageFault;
+					sigemptyset(&sa.sa_mask);
+					sa.sa_flags = SA_RESTART | SA_SIGINFO;
+					if (sigaction(SIGCHLD, &sa, 0) == -1) {
+					  perror(0);
+					  exit(1);
+					}
 				}
 				else
 				{

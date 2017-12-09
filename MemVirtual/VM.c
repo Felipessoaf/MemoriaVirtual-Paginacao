@@ -20,6 +20,11 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	if(seg < 0)
 	{
 		seg = shmget (pid, MAXPAGE*sizeof(Page), IPC_CREAT | 0666);
+		if(seg < 0)
+		{
+			printf("Erro seg");
+			exit(1);
+		}
 		pageTable = (Page*)shmat(seg,0,0);
 		for(i = 0; i < MAXPAGE; i++)
 		{
@@ -33,9 +38,19 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	}
 
 	segPage = shmget (4321, sizeof(int), 0666);
+	if(segPage < 0)
+	{
+		printf("Erro segPage");
+		exit(1);
+	}
 	currentPage = (int*)shmat(segPage,0,0);
 
 	segFrame = shmget (1234, 256*sizeof(Frame), 0666);
+	if(segFrame < 0)
+	{
+		printf("Erro segFrame");
+		exit(1);
+	}
 	mainMem = (Frame*)shmat(segFrame,0,0);
 
 	printf("ANTES REGIAO CRITICA\n");
@@ -67,6 +82,10 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	//REGIAO CRITICA--------------------------------------
     pthread_mutex_unlock(&lock);
 	printf("DEPOIS REGIAO CRITICA\n");
+
+	shmdt (mainMem);
+	shmdt (currentPage);
+	shmdt (pageTable);
 }
 
 unsigned concatenate(unsigned x, unsigned y) {

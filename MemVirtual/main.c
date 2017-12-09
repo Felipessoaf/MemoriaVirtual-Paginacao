@@ -64,15 +64,35 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 	Frame *mainMem;
 
 	segIndex = shmget (8462, sizeof(int), 0666);
+	if(segIndex < 0)
+	{
+		printf("Erro segIndex");
+		exit(1);
+	}
 	lastIndex = (int*)shmat(segIndex,0,0);
 
 	segPage = shmget (4321, sizeof(int), 0666);
+	if(segPage < 0)
+	{
+		printf("Erro segPage");
+		exit(1);
+	}
 	currentPage = (int*)shmat(segPage,0,0);
 
 	segPageTable = shmget (info->si_pid, MAXPAGE*sizeof(Page), 0666);
+	if(segPageTable < 0)
+	{
+		printf("Erro segPageTable");
+		exit(1);
+	}
 	pageTable = (Page*)shmat(segPageTable,0,0);
 
 	segFrame = shmget (1234, 256*sizeof(Frame), 0666);
+	if(segFrame < 0)
+	{
+		printf("Erro segFrame");
+		exit(1);
+	}
 	mainMem = (Frame*)shmat(segFrame,0,0);
 
 	printf("PAGE FAULT\n");
@@ -123,6 +143,11 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 	printf("\n\n\nLIBERANDO PAGE FAULT\n\n\n");
 	//manda SIGCONT pro sender
 	kill(info->si_pid, SIGCONT);
+
+	shmdt (mainMem);
+	shmdt (currentPage);
+	shmdt (lastIndex);
+	shmdt (pageTable);
 }
 
 void LostPage()
@@ -132,13 +157,26 @@ void LostPage()
 	Page *pageTable;
 
 	seg = shmget (getpid(), MAXPAGE*sizeof(Page), 0666);
+	if(seg < 0)
+	{
+		printf("Erro seg");
+		exit(1);
+	}
 	pageTable = (Page*)shmat(seg,0,0);
 
 	segPage = shmget (4321, sizeof(int), 0666);
+	if(segPage < 0)
+	{
+		printf("Erro segPage");
+		exit(1);
+	}
 	currentPage = (int*)shmat(segPage,0,0);
 
 	pageTable[*currentPage].frame = -1;
 	pageTable[*currentPage].inMemory = 0;
+
+	shmdt (pageTable);
+	shmdt (currentPage);
 }
 
 void ReadFile(char *fileName)
@@ -176,10 +214,27 @@ int main()
 	clock_t start, end;
 	double cpu_time_used;
 	Frame *mainMem;
+	struct sigaction sa;
 
-	seg = shmget (1234, MAXFRAME*sizeof(Frame), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
-	segPage = shmget (4321, sizeof(int), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
-	segIndex = shmget (8462, sizeof(int), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+	seg = shmget (1234, MAXFRAME*sizeof(Frame), IPC_CREAT | 0666);
+	segPage = shmget (4321, sizeof(int), IPC_CREAT | 0666);
+	segIndex = shmget (8462, sizeof(int), IPC_CREAT | 0666);
+
+	if(seg < 0)
+	{
+		printf("Erro seg");
+		exit(1);
+	}
+	if(segPage < 0)
+	{
+		printf("Erro segPage");
+		exit(1);
+	}
+	if(segIndex < 0)
+	{
+		printf("Erro segIndex");
+		exit(1);
+	}
 
 	mainMem = (Frame*)shmat(seg,0,0);
 	currentPage = (int*)shmat(segPage,0,0);
@@ -198,11 +253,10 @@ int main()
 				{
 					//signal(SIGUSR2, PageFault);
 					Init();
-					struct sigaction sa;
 					sa.sa_handler = &PageFault;
 					sigemptyset(&sa.sa_mask);
 					sa.sa_flags = SA_RESTART | SA_SIGINFO;
-					if (sigaction(SIGCHLD, &sa, 0) == -1) {
+					if (sigaction(SIGUSR2, &sa, 0) == -1) {
 					  perror(0);
 					  exit(1);
 					}
@@ -245,6 +299,17 @@ int main()
 	cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
 
 	printf("Duracao em segundos: %f\n", cpu_time_used);
+
+
+
+	shmdt (mainMem);
+	shmdt (currentPage);
+	shmdt (lastIndex);
+
+	shmctl (seg, IPC_RMID, 0);
+	shmctl (segPage, IPC_RMID, 0);
+	shmctl (segIndex, IPC_RMID, 0);
+
 	return 0;
 }
 

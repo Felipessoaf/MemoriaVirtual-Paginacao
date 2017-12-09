@@ -16,25 +16,29 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	Page *pageTable;
 	Frame *mainMem;
 
-//	seg = shmget (pid, MAXPAGE*sizeof(Page), 0666);
-//	if(seg < 0)
-//	{
+	seg = shmget (pid, MAXPAGE*sizeof(Page), 0666);
+	if(seg < 0)
+	{
 		seg = shmget (pid, MAXPAGE*sizeof(Page), IPC_CREAT | 0666);
-//	}
-//	else
-//	{
-//		pageTable = {[0 ... MAXPAGE-1].frame = -1,[0 ... MAXPAGE-1].inMemory = 0};
-//	}
-
-	pageTable = (Page*)shmat(seg,0,0);
+		pageTable = (Page*)shmat(seg,0,0);
+		for(i = 0; i < MAXPAGE; i++)
+		{
+			pageTable[i].frame = -1;
+			pageTable[i].inMemory = 0;
+		}
+	}
+	else
+	{
+		pageTable = (Page*)shmat(seg,0,0);
+	}
 
 	segPage = shmget (4321, sizeof(int), 0666);
 	currentPage = (int*)shmat(segPage,0,0);
 
 	segFrame = shmget (1234, 256*sizeof(Frame), 0666);
-	mainMem = (Frame*)shmat(seg,0,0);
+	mainMem = (Frame*)shmat(segFrame,0,0);
 
-	printf("\n\n\nANTES REGIAO CRITICA\n\n\n");
+	printf("ANTES REGIAO CRITICA\n");
 	//REGIAO CRITICA--------------------------------------
     pthread_mutex_lock(&lock);
 	*currentPage = page;
@@ -45,7 +49,7 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 		//se nao tiver, manda SIGUSR1 pro GM pra avisar que deu page fault
 		kill(getppid(), SIGUSR1);
 		sleep(1);
-		printf("\n\n\nDPS DO PAGE FAULT\n\n\n");
+		printf("DPS DO PAGE FAULT\n");
 	}
 	else
 	{
@@ -62,7 +66,7 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 
 	//REGIAO CRITICA--------------------------------------
     pthread_mutex_unlock(&lock);
-	printf("\n\n\DEPOIS REGIAO CRITICA\n\n\n");
+	printf("DEPOIS REGIAO CRITICA\n");
 }
 
 unsigned concatenate(unsigned x, unsigned y) {

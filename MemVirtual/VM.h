@@ -26,7 +26,7 @@ typedef struct page
 {
 	int frame;
 	char inMemory;
-} Page = {-1,0};
+} Page;
 
 typedef struct frame
 {
@@ -36,7 +36,7 @@ typedef struct frame
 	int pid;
 } Frame;
 
-unsigned int trans(int pid, unsigned int page, unsigned int offset, char rw);
+void trans(int pid, unsigned int page, unsigned int offset, char rw);
 
 void Init();
 

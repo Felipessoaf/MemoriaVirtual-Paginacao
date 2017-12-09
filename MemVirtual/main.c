@@ -21,10 +21,45 @@
 #define MAXFRAME 256
 #define RESETTIMER 30
 
+int LRU(Frame *mainMem)
+{
+	int i, removeIndex;//seg,
+	clock_t minTime;
+//	Frame *mainMem;
+
+	minTime = clock();
+	removeIndex = -1;
+
+//	seg = shmget (1234, 256*sizeof(Frame), 0666);
+//	if(seg < 0)
+//	{
+//		printf("Error shmget\n");
+//		exit(1);
+//	}
+//
+//	mainMem = (Frame*)shmat(seg,0,0);
+
+	for(i = 0; i < MAXFRAME; i++)
+	{
+		if(mainMem[i].lastUse < minTime)
+		{
+			removeIndex = i;
+			minTime = mainMem[i].lastUse;
+		}
+	}
+
+	if(removeIndex == -1)
+	{
+		printf("Error LRU\n");
+		exit(1);
+	}
+
+	return minTime;
+}
 
 void PageFault(int sig, siginfo_t* info, void* vp)
 {
-	int i, seg, segPage, segPageTable, segFrame, *currentPage, segIndex, *lastIndex, pidLost, removeIndex;
+	int segPage, segPageTable, segFrame, *currentPage, segIndex, *lastIndex, pidLost, removeIndex;
 	Page *pageTable;
 	Frame *mainMem;
 
@@ -38,9 +73,9 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 	pageTable = (Page*)shmat(segPageTable,0,0);
 
 	segFrame = shmget (1234, 256*sizeof(Frame), 0666);
-	mainMem = (Frame*)shmat(seg,0,0);
+	mainMem = (Frame*)shmat(segFrame,0,0);
 
-	printf("\n\n\nPAGE FAULT\n\n\n");
+	printf("PAGE FAULT\n");
 
 	//manda SIGSTOP pro sender
 	kill(info->si_pid, SIGSTOP);
@@ -49,10 +84,10 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 	if(*lastIndex < MAXFRAME)
 	{
 		//atualiza tabela
-		pageTable[currentPage].frame = *lastIndex;
-		pageTable[currentPage].inMemory = 1;
+		pageTable[*currentPage].frame = *lastIndex;
+		pageTable[*currentPage].inMemory = 1;
 		//se tiver, marca o lugar como usado
-		mainMem[*lastIndex].page = currentPage;
+		mainMem[*lastIndex].page = *currentPage;
 		mainMem[*lastIndex].pid = info->si_pid;
 		mainMem[*lastIndex].lastUse = clock();
 		(*lastIndex)++;
@@ -71,13 +106,13 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 		}
 
 		//atualiza tabela
-		pageTable[currentPage].frame = removeIndex;
-		pageTable[currentPage].inMemory = 1;
+		pageTable[*currentPage].frame = removeIndex;
+		pageTable[*currentPage].inMemory = 1;
 
 		//update page a ser retirada
 		*currentPage = mainMem[removeIndex].page;
 		//tira ele, e bota o novo no lugar
-		mainMem[removeIndex].page = currentPage;
+		mainMem[removeIndex].page = *currentPage;
 		mainMem[removeIndex].pid = info->si_pid;
 		mainMem[removeIndex].lastUse = clock();
 
@@ -88,42 +123,6 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 	printf("\n\n\nLIBERANDO PAGE FAULT\n\n\n");
 	//manda SIGCONT pro sender
 	kill(info->si_pid, SIGCONT);
-}
-
-int LRU(Frame *mainMem)
-{
-	int seg,i, removeIndex;
-	clock_t minTime;
-//	Frame *mainMem;
-
-	minTime = clock();
-	removeIndex = -1;
-
-//	seg = shmget (1234, 256*sizeof(Frame), 0666);
-//	if(seg < 0)
-//	{
-//		printf("Error shmget\n");
-//		exit(1);
-//	}
-//
-//	mainMem = (Frame*)shmat(seg,0,0);
-
-	for(i = 0; i < MAXFRAME; i++)
-	{
-		if(mainMem[i]->lastUse < minTime)
-		{
-			removeIndex = i;
-			minTime = mainMem[i]->lastUse;
-		}
-	}
-
-	if(removeIndex == -1)
-	{
-		printf("Error LRU\n");
-		exit(1);
-	}
-
-	return minTime;
 }
 
 void LostPage()
@@ -138,8 +137,8 @@ void LostPage()
 	segPage = shmget (4321, sizeof(int), 0666);
 	currentPage = (int*)shmat(segPage,0,0);
 
-	pageTable[currentPage].frame = -1;
-	pageTable[currentPage].inMemory = 0;
+	pageTable[*currentPage].frame = -1;
+	pageTable[*currentPage].inMemory = 0;
 }
 
 void ReadFile(char *fileName)
@@ -158,7 +157,7 @@ void ReadFile(char *fileName)
 	{
 		printf("Erro file\n");
 	}
-	printf("Entrou\n");
+//	printf("Entrou\n");
 
 	while(fscanf(file, "%x %c", &addr, &rw) == 2)
 	{
@@ -187,6 +186,7 @@ int main()
 	lastIndex = (int*)shmat(segIndex,0,0);
 	*lastIndex = 0;
 
+	printf("Start clock\n");
 	start = clock();
 	if(fork() != 0)
 	{

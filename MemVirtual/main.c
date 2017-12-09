@@ -214,7 +214,7 @@ int main()
 	clock_t start, end;
 	double cpu_time_used;
 	Frame *mainMem;
-	struct sigaction sa;
+	struct sigaction sa, old_action;
 
 	seg = shmget (1234, MAXFRAME*sizeof(Frame), IPC_CREAT | 0666);
 	segPage = shmget (4321, sizeof(int), IPC_CREAT | 0666);
@@ -251,12 +251,12 @@ int main()
 			{
 				if(fork() != 0)
 				{
-					//signal(SIGUSR2, PageFault);
+					//signal(SIGUSR1, PageFault);
 					Init();
 					sa.sa_handler = &PageFault;
 					sigemptyset(&sa.sa_mask);
 					sa.sa_flags = SA_RESTART | SA_SIGINFO;
-					if (sigaction(SIGUSR2, &sa, 0) == -1) {
+					if (sigaction(SIGUSR1, &sa, &old_action) == -1) {
 					  perror(0);
 					  exit(1);
 					}

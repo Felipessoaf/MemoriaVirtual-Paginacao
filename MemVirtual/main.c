@@ -95,7 +95,7 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 	}
 	mainMem = (Frame*)shmat(segFrame,0,0);
 
-	printf("PAGE FAULT\n");
+	printf("%d: PAGE FAULT\n", info->si_pid);
 
 	//manda SIGSTOP pro sender
 	kill(info->si_pid, SIGSTOP);
@@ -140,7 +140,7 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 		kill(pidLost, SIGUSR2);
 	}
 
-	printf("\n\n\nLIBERANDO PAGE FAULT\n\n\n");
+	printf("%d: LIBERANDO PAGE FAULT\n", info->si_pid);
 	//manda SIGCONT pro sender
 	kill(info->si_pid, SIGCONT);
 
@@ -300,7 +300,7 @@ int main()
 
 	printf("Duracao em segundos: %f\n", cpu_time_used);
 
-
+	End();
 
 	shmdt (mainMem);
 	shmdt (currentPage);

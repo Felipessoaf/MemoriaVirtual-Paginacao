@@ -18,7 +18,7 @@
 #include <sys/shm.h>
 #include <time.h>
 #include <limits.h>
-#include <pthread.h>
+#include <sys/sem.h>
 
 #define MAXPAGE 65536
 
@@ -39,5 +39,7 @@ typedef struct frame
 void trans(int pid, unsigned int page, unsigned int offset, char rw);
 
 void Init();
+
+void End();
 
 #endif /* VM_H_ */

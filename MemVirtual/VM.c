@@ -6,15 +6,32 @@
  */
 #include "VM.h"
 
-static pthread_mutex_t lock;
+union semun
+{
+	int val;
+	struct semid_ds *buf;
+	ushort *array;
+};
+
+// inicializa o valor do semáforo
+int setSemValue(int semId);
+// remove o semáforo
+void delSemValue(int semId);
+// operação P
+int semaforoP(int semId);
+//operação V
+int semaforoV(int semId);
 
 static unsigned concatenate(unsigned x, unsigned y);
 
 void trans(int pid, unsigned int page, unsigned int offset, char rw)
 {
 	int i, seg, segPage, segFrame, *currentPage;
+	int semId;
 	Page *pageTable;
 	Frame *mainMem;
+
+	semId = semget (8752, 1, 0666);
 
 	seg = shmget (pid, MAXPAGE*sizeof(Page), 0666);
 	if(seg < 0)
@@ -53,9 +70,10 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	}
 	mainMem = (Frame*)shmat(segFrame,0,0);
 
-	printf("ANTES REGIAO CRITICA\n");
+	printf("%d: ANTES REGIAO CRITICA\n", pid);
 	//REGIAO CRITICA--------------------------------------
-    pthread_mutex_lock(&lock);
+//    pthread_mutex_lock(&lock);
+	semaforoP(semId);
 	*currentPage = page;
 
 	//procura na tabela se a page está associada já a um frame
@@ -64,7 +82,7 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 		//se nao tiver, manda SIGUSR1 pro GM pra avisar que deu page fault
 		kill(getppid(), SIGUSR1);
 		sleep(1);
-		printf("DPS DO PAGE FAULT\n");
+		printf("%d: DPS DO PAGE FAULT\n",pid);
 	}
 	else
 	{
@@ -80,8 +98,9 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	printf("Processo: %d\tEndereco Fisico: %x\tAcesso: %c\n", pid, concatenate(pageTable[page].frame, offset), rw);
 
 	//REGIAO CRITICA--------------------------------------
-    pthread_mutex_unlock(&lock);
-	printf("DEPOIS REGIAO CRITICA\n");
+//    pthread_mutex_unlock(&lock);
+	semaforoV(semId);
+	printf("%d: DEPOIS REGIAO CRITICA\n", pid);
 
 	shmdt (mainMem);
 	shmdt (currentPage);
@@ -97,13 +116,57 @@ unsigned concatenate(unsigned x, unsigned y) {
 
 void Init()
 {
-	pthread_mutexattr_t attrmutex;
+//	pthread_mutexattr_t attrmutex;
+//
+//	pthread_mutexattr_init(&attrmutex);
+//	pthread_mutexattr_setpshared(&attrmutex, PTHREAD_PROCESS_SHARED);
+//
+//    pthread_mutex_init(&lock, &attrmutex);
+//
+//    pthread_mutex_destroy(&lock);
+//    pthread_mutexattr_destroy(&attrmutex);
+	int semId;
 
-	pthread_mutexattr_init(&attrmutex);
-	pthread_mutexattr_setpshared(&attrmutex, PTHREAD_PROCESS_SHARED);
+	semId = semget (8752, 1, 0666 | IPC_CREAT);
+	setSemValue(semId);
+}
 
-    pthread_mutex_init(&lock, &attrmutex);
+void End()
+{
+	int semId;
+	semId = semget (8752, 1, 0666);
+	delSemValue(semId);
+}
 
-    pthread_mutex_destroy(&lock);
-    pthread_mutexattr_destroy(&attrmutex);
+int setSemValue(int semId)
+{
+	union semun semUnion;
+	semUnion.val = 1;
+	return semctl(semId, 0, SETVAL, semUnion);
+}
+
+void delSemValue(int semId)
+{
+	union semun semUnion;
+	semctl(semId, 0, IPC_RMID, semUnion);
+}
+
+int semaforoP(int semId)
+{
+	struct sembuf semB;
+	semB.sem_num = 0;
+	semB.sem_op = -1;
+	semB.sem_flg = SEM_UNDO;
+	semop(semId, &semB, 1);
+	return 0;
+}
+
+int semaforoV(int semId)
+{
+	struct sembuf semB;
+	semB.sem_num = 0;
+	semB.sem_op = 1;
+	semB.sem_flg = SEM_UNDO;
+	semop(semId, &semB, 1);
+	return 0;
 }

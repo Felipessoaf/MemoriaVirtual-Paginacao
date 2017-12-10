@@ -26,12 +26,25 @@ static unsigned concatenate(unsigned x, unsigned y);
 
 void trans(int pid, unsigned int page, unsigned int offset, char rw)
 {
-	int i, seg, segPage, segFrame, *currentPage;
+	int i, seg, segPage, segFrame, segCounter, *currentPage, *counter;
 	int semId;
 	Page *pageTable;
 	Frame *mainMem;
 
 	semId = semget (8752, 1, 0666);
+	if(semId < 0)
+	{
+		printf("Erro semId");
+		exit(1);
+	}
+
+	segCounter = shmget (2468, sizeof(int), 0666);
+	if(segCounter < 0)
+	{
+		printf("Erro segCounter");
+		exit(1);
+	}
+	counter = (int*)shmat(segCounter,0,0);
 
 	seg = shmget (pid, MAXPAGE*sizeof(Page), 0666);
 	if(seg < 0)
@@ -70,10 +83,22 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	}
 	mainMem = (Frame*)shmat(segFrame,0,0);
 
+#ifdef LOG
 	printf("%d: ANTES REGIAO CRITICA\n", pid);
+#endif
 	//REGIAO CRITICA--------------------------------------
 //    pthread_mutex_lock(&lock);
 	semaforoP(semId);
+
+	if((*counter) >= RESETTIMER)
+	{
+		clock_t time = clock();
+		for(i = 0; i < MAXFRAME; i++)
+		{
+			mainMem[i].lastUse = time;
+		}
+	}
+
 	*currentPage = page;
 
 	//procura na tabela se a page está associada já a um frame
@@ -82,12 +107,17 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 		//se nao tiver, manda SIGUSR1 pro GM pra avisar que deu page fault
 		kill(getppid(), SIGUSR1);
 		sleep(1);
+#ifdef LOG
 		printf("%d: DPS DO PAGE FAULT\n",pid);
+#endif
 	}
 	else
 	{
 		//marcar no frame usado o tempo
 		mainMem[pageTable[page].frame].lastUse = clock();
+#ifdef LOG
+		printf("%d: JA EM MEMORIA\n",pid);
+#endif
 	}
 	//marcar no frame usado o RW
 	if(rw == 'W')
@@ -96,15 +126,19 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	}
 
 	printf("Processo: %d\tEndereco Fisico: %x\tAcesso: %c\n", pid, concatenate(pageTable[page].frame, offset), rw);
+	(*counter)++;
 
 	//REGIAO CRITICA--------------------------------------
 //    pthread_mutex_unlock(&lock);
 	semaforoV(semId);
+#ifdef LOG
 	printf("%d: DEPOIS REGIAO CRITICA\n", pid);
+#endif
 
 	shmdt (mainMem);
 	shmdt (currentPage);
 	shmdt (pageTable);
+	shmdt (counter);
 }
 
 unsigned concatenate(unsigned x, unsigned y) {

@@ -18,9 +18,6 @@
 
 #include "VM.h"
 
-#define MAXFRAME 256
-#define RESETTIMER 30
-
 int LRU(Frame *mainMem)
 {
 	int i, removeIndex;//seg,
@@ -54,7 +51,7 @@ int LRU(Frame *mainMem)
 		exit(1);
 	}
 
-	return minTime;
+	return removeIndex;
 }
 
 void PageFault(int sig, siginfo_t* info, void* vp)
@@ -95,7 +92,9 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 	}
 	mainMem = (Frame*)shmat(segFrame,0,0);
 
+#ifdef LOG
 	printf("%d: PAGE FAULT\n", info->si_pid);
+#endif
 
 	//manda SIGSTOP pro sender
 	kill(info->si_pid, SIGSTOP);
@@ -140,7 +139,9 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 		kill(pidLost, SIGUSR2);
 	}
 
+#ifdef LOG
 	printf("%d: LIBERANDO PAGE FAULT\n", info->si_pid);
+#endif
 	//manda SIGCONT pro sender
 	kill(info->si_pid, SIGCONT);
 
@@ -181,7 +182,7 @@ void LostPage()
 
 void ReadFile(char *fileName)
 {
-	int pid;
+	int pid, counter;
 	unsigned int addr, page, offset;
 	char rw;
 	FILE* file;
@@ -190,6 +191,8 @@ void ReadFile(char *fileName)
 
 	file = fopen(fileName, "r");
 	pid = getpid();
+	counter = 0;
+	printf("%d: %s\n",pid,fileName);
 
 	if(file == NULL)
 	{
@@ -202,7 +205,9 @@ void ReadFile(char *fileName)
 		page = addr>>16;
 		offset = ((addr<<16)>>16);
 
+		printf("%d: Trans %d\n",pid,counter);
 		trans(pid, page, offset, rw);
+		counter++;
 	}
 
 	fclose(file);
@@ -210,7 +215,7 @@ void ReadFile(char *fileName)
 
 int main()
 {
-	int i, status, seg, segPage, segIndex, *currentPage, *lastIndex;
+	int i, status, seg, segPage, segIndex, segCounter, *currentPage, *lastIndex, *counter;
 	clock_t start, end;
 	double cpu_time_used;
 	Frame *mainMem;
@@ -219,6 +224,7 @@ int main()
 	seg = shmget (1234, MAXFRAME*sizeof(Frame), IPC_CREAT | 0666);
 	segPage = shmget (4321, sizeof(int), IPC_CREAT | 0666);
 	segIndex = shmget (8462, sizeof(int), IPC_CREAT | 0666);
+	segCounter = shmget (2468, sizeof(int), IPC_CREAT | 0666);
 
 	if(seg < 0)
 	{
@@ -235,11 +241,18 @@ int main()
 		printf("Erro segIndex");
 		exit(1);
 	}
+	if(segCounter < 0)
+	{
+		printf("Erro segCounter");
+		exit(1);
+	}
 
 	mainMem = (Frame*)shmat(seg,0,0);
 	currentPage = (int*)shmat(segPage,0,0);
 	lastIndex = (int*)shmat(segIndex,0,0);
+	counter = (int*)shmat(segCounter,0,0);
 	*lastIndex = 0;
+	*counter = 0;
 
 	printf("Start clock\n");
 	start = clock();
@@ -305,10 +318,12 @@ int main()
 	shmdt (mainMem);
 	shmdt (currentPage);
 	shmdt (lastIndex);
+	shmdt (counter);
 
 	shmctl (seg, IPC_RMID, 0);
 	shmctl (segPage, IPC_RMID, 0);
 	shmctl (segIndex, IPC_RMID, 0);
+	shmctl (segCounter, IPC_RMID, 0);
 
 	return 0;
 }

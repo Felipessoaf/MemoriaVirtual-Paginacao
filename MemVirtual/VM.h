@@ -21,6 +21,9 @@
 #include <sys/sem.h>
 
 #define MAXPAGE 65536
+#define RESETTIMER 30
+#define MAXFRAME 256
+//#define LOG
 
 typedef struct page
 {

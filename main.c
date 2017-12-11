@@ -21,10 +21,11 @@
 int LRU(Frame *mainMem)
 {
 	int i, removeIndex;//seg,
-	clock_t minTime;
+	struct timeval minTime;
 //	Frame *mainMem;
+	double elapsedTime;
 
-	minTime = clock();
+	gettimeofday(&minTime, NULL);
 	removeIndex = -1;
 
 //	seg = shmget (1234, 256*sizeof(Frame), 0666);
@@ -38,10 +39,13 @@ int LRU(Frame *mainMem)
 
 	for(i = 0; i < MAXFRAME; i++)
 	{
-		if(mainMem[i].lastUse < minTime)
+		elapsedTime = (minTime.tv_sec - mainMem[i].lastUse.tv_sec) * 1000.0;      // sec to ms
+		elapsedTime += (minTime.tv_usec - mainMem[i].lastUse.tv_usec) / 1000.0;   // us to ms
+		if(elapsedTime > 0)
 		{
 			removeIndex = i;
-			minTime = mainMem[i].lastUse;
+			minTime.tv_sec = mainMem[i].lastUse.tv_sec;
+			minTime.tv_usec = mainMem[i].lastUse.tv_usec;
 		}
 	}
 
@@ -109,7 +113,8 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 		//se tiver, marca o lugar como usado
 		mainMem[*lastIndex].page = *currentPage;
 		mainMem[*lastIndex].pid = info->si_pid;
-		mainMem[*lastIndex].lastUse = clock();
+		mainMem[*lastIndex].M = 0;
+		gettimeofday(&mainMem[*lastIndex].lastUse, NULL);
 		(*lastIndex)++;
 		sleep(1);
 	}
@@ -129,12 +134,14 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 		pageTable[*currentPage].frame = removeIndex;
 		pageTable[*currentPage].inMemory = 1;
 
-		//update page a ser retirada
-		*currentPage = mainMem[removeIndex].page;
 		//tira ele, e bota o novo no lugar
 		mainMem[removeIndex].page = *currentPage;
 		mainMem[removeIndex].pid = info->si_pid;
-		mainMem[removeIndex].lastUse = clock();
+		mainMem[removeIndex].M = 0;
+		gettimeofday(&mainMem[removeIndex].lastUse, NULL);
+
+		//update page a ser retirada
+		*currentPage = mainMem[removeIndex].page;
 
 		//manda SIGUSR2 pro processo que perdeu o frame
 		kill(pidLost, SIGUSR2);
@@ -145,7 +152,10 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 #endif
 	//manda SIGCONT pro sender
 	kill(info->si_pid, SIGCONT);
+#ifdef LOG
 	printf("%d: SENDER LIBERADO\n",info->si_pid);
+#endif
+	kill(info->si_pid, SIGCONT);
 
 	shmdt (mainMem);
 	shmdt (currentPage);
@@ -267,9 +277,8 @@ int main()
 			{
 				if(fork() != 0)
 				{
-					//signal(SIGUSR1, PageFault);
 					Init();
-					sa.sa_handler = &PageFault;
+					sa.sa_sigaction = &PageFault;
 					sigemptyset(&sa.sa_mask);
 					sa.sa_flags = SA_RESTART | SA_SIGINFO;
 					if (sigaction(SIGUSR1, &sa, &old_action) == -1) {

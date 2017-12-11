@@ -30,6 +30,7 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	int semId;
 	Page *pageTable;
 	Frame *mainMem;
+	struct timeval t1;
 
 	semId = semget (8752, 1, 0666);
 	if(semId < 0)
@@ -92,10 +93,11 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 
 	if((*counter) >= RESETTIMER)
 	{
-		clock_t time = clock();
+		gettimeofday(&t1, NULL);
 		for(i = 0; i < MAXFRAME; i++)
 		{
-			mainMem[i].lastUse = time;
+			mainMem[i].lastUse.tv_sec = t1.tv_sec;
+			mainMem[i].lastUse.tv_usec = t1.tv_usec;
 		}
 	}
 
@@ -107,17 +109,19 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 		//se nao tiver, manda SIGUSR1 pro GM pra avisar que deu page fault
 		kill(getppid(), SIGUSR1);
 //		sleep(1);
-		printf("%d: VOU ME PARAR\n",pid);
-		kill(pid, SIGSTOP);
-		printf("%d: VOLTEI\n",pid);
 #ifdef LOG
+		printf("%d: VOU ME PARAR\n",pid);
+#endif
+		kill(pid, SIGSTOP);
+#ifdef LOG
+		printf("%d: VOLTEI\n",pid);
 		printf("%d: DPS DO PAGE FAULT\n",pid);
 #endif
 	}
 	else
 	{
 		//marcar no frame usado o tempo
-		mainMem[pageTable[page].frame].lastUse = clock();
+		gettimeofday(&mainMem[pageTable[page].frame].lastUse, NULL);
 #ifdef LOG
 		printf("%d: JA EM MEMORIA\n",pid);
 #endif

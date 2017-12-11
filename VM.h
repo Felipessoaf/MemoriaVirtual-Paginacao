@@ -24,7 +24,7 @@
 #define MAXPAGE 65536
 #define RESETTIMER 30
 #define MAXFRAME 256
-//#define LOG
+#define LOG
 
 typedef struct page
 {
@@ -36,7 +36,7 @@ typedef struct frame
 {
 	int page;
 	char M;
-	clock_t lastUse;
+	struct timeval lastUse;
 	int pid;
 } Frame;
 

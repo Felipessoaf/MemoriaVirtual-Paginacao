@@ -97,6 +97,7 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 #endif
 
 	//manda SIGSTOP pro sender
+	printf("%d: PARANDO SENDER\n",info->si_pid);
 	kill(info->si_pid, SIGSTOP);
 
 	//ve se tem espaço na memoria
@@ -144,6 +145,7 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 #endif
 	//manda SIGCONT pro sender
 	kill(info->si_pid, SIGCONT);
+	printf("%d: SENDER LIBERADO\n",info->si_pid);
 
 	shmdt (mainMem);
 	shmdt (currentPage);
@@ -216,10 +218,10 @@ void ReadFile(char *fileName)
 int main()
 {
 	int i, status, seg, segPage, segIndex, segCounter, *currentPage, *lastIndex, *counter;
-	clock_t start, end;
-	double cpu_time_used;
 	Frame *mainMem;
 	struct sigaction sa, old_action;
+	struct timeval t1, t2;
+    double elapsedTime;
 
 	seg = shmget (1234, MAXFRAME*sizeof(Frame), IPC_CREAT | 0666);
 	segPage = shmget (4321, sizeof(int), IPC_CREAT | 0666);
@@ -255,7 +257,8 @@ int main()
 	*counter = 0;
 
 	printf("Start clock\n");
-	start = clock();
+	gettimeofday(&t1, NULL);
+
 	if(fork() != 0)
 	{
 		if(fork() != 0)
@@ -308,10 +311,10 @@ int main()
 		waitpid(-1, &status, 0);
 	}
 
-	end = clock();
-	cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-
-	printf("Duracao em segundos: %f\n", cpu_time_used);
+	gettimeofday(&t2, NULL);
+	elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
+	elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
+	printf("Duracao em segundos: %f\n", elapsedTime/1000);
 
 	End();
 

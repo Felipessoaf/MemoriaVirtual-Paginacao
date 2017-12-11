@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 #include <sys/shm.h>
 #include <time.h>
+#include <sys/time.h>
 #include <limits.h>
 #include <sys/sem.h>
 

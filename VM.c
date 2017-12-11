@@ -106,7 +106,10 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	{
 		//se nao tiver, manda SIGUSR1 pro GM pra avisar que deu page fault
 		kill(getppid(), SIGUSR1);
-		sleep(1);
+//		sleep(1);
+		printf("%d: VOU ME PARAR\n",pid);
+		kill(pid, SIGSTOP);
+		printf("%d: VOLTEI\n",pid);
 #ifdef LOG
 		printf("%d: DPS DO PAGE FAULT\n",pid);
 #endif

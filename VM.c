@@ -88,7 +88,6 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	printf("%d: ANTES REGIAO CRITICA\n", pid);
 #endif
 	//REGIAO CRITICA--------------------------------------
-//    pthread_mutex_lock(&lock);
 	semaforoP(semId);
 
 	if((*counter) >= RESETTIMER)
@@ -108,7 +107,6 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	{
 		//se nao tiver, manda SIGUSR1 pro GM pra avisar que deu page fault
 		kill(getppid(), SIGUSR1);
-//		sleep(1);
 #ifdef LOG
 		printf("%d: VOU ME PARAR\n",pid);
 #endif
@@ -136,7 +134,6 @@ void trans(int pid, unsigned int page, unsigned int offset, char rw)
 	(*counter)++;
 
 	//REGIAO CRITICA--------------------------------------
-//    pthread_mutex_unlock(&lock);
 	semaforoV(semId);
 #ifdef LOG
 	printf("%d: DEPOIS REGIAO CRITICA\n", pid);
@@ -157,15 +154,6 @@ unsigned concatenate(unsigned x, unsigned y) {
 
 void Init()
 {
-//	pthread_mutexattr_t attrmutex;
-//
-//	pthread_mutexattr_init(&attrmutex);
-//	pthread_mutexattr_setpshared(&attrmutex, PTHREAD_PROCESS_SHARED);
-//
-//    pthread_mutex_init(&lock, &attrmutex);
-//
-//    pthread_mutex_destroy(&lock);
-//    pthread_mutexattr_destroy(&attrmutex);
 	int semId;
 
 	semId = semget (8752, 1, 0666 | IPC_CREAT);

@@ -18,24 +18,16 @@
 
 #include "VM.h"
 
+int pageFaultCount;
+
 int LRU(Frame *mainMem)
 {
 	int i, removeIndex;//seg,
 	struct timeval minTime;
-//	Frame *mainMem;
 	double elapsedTime;
 
 	gettimeofday(&minTime, NULL);
 	removeIndex = -1;
-
-//	seg = shmget (1234, 256*sizeof(Frame), 0666);
-//	if(seg < 0)
-//	{
-//		printf("Error shmget\n");
-//		exit(1);
-//	}
-//
-//	mainMem = (Frame*)shmat(seg,0,0);
 
 	for(i = 0; i < MAXFRAME; i++)
 	{
@@ -98,10 +90,9 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 
 #ifdef LOG
 	printf("%d: PAGE FAULT\n", info->si_pid);
-#endif
-
-	//manda SIGSTOP pro sender
 	printf("%d: PARANDO SENDER\n",info->si_pid);
+#endif
+	//manda SIGSTOP pro sender
 	kill(info->si_pid, SIGSTOP);
 
 	//ve se tem espaço na memoria
@@ -157,6 +148,8 @@ void PageFault(int sig, siginfo_t* info, void* vp)
 #endif
 	kill(info->si_pid, SIGCONT);
 
+	pageFaultCount++;
+
 	shmdt (mainMem);
 	shmdt (currentPage);
 	shmdt (lastIndex);
@@ -210,7 +203,6 @@ void ReadFile(char *fileName)
 	{
 		printf("Erro file\n");
 	}
-//	printf("Entrou\n");
 
 	while(fscanf(file, "%x %c", &addr, &rw) == 2)
 	{
@@ -278,6 +270,7 @@ int main()
 				if(fork() != 0)
 				{
 					Init();
+					pageFaultCount = 0;
 					sa.sa_sigaction = &PageFault;
 					sigemptyset(&sa.sa_mask);
 					sa.sa_flags = SA_RESTART | SA_SIGINFO;
@@ -324,6 +317,7 @@ int main()
 	elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
 	elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
 	printf("Duracao em segundos: %f\n", elapsedTime/1000);
+	printf("Page Faults: %d\n", pageFaultCount);
 
 	End();
 
